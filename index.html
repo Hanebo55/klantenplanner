@@ -15,6 +15,7 @@ button.g{background:#666}
 .c{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee}
 .c button{width:auto;padding:2px 8px;margin-left:4px}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+.huis{font-size:26px;line-height:32px;text-align:center;background:none;border:0}
 small{color:#666}#info{margin:4px 0;font-weight:600}
 @media(max-width:700px){body{flex-direction:column-reverse}#side{width:100%;height:55%}#map{height:45%;flex:none}}
 </style></head><body>
@@ -40,6 +41,7 @@ small{color:#666}#info{margin:4px 0;font-weight:600}
 <button onclick="send()">Verstuur berichten voor deze dag</button>
 <h2>Instellingen</h2>
 <input id="bedrijf" placeholder="Bedrijfsnaam" onchange="cfg()">
+<input id="thuis" placeholder="Thuisadres (startpunt van de route)" onchange="cfg()">
 <input id="url" placeholder="Verzend-URL (komt in de volgende stap)" onchange="cfg()">
 <small>Grijs = nog te plannen · blauw = gepland · groen = klaar</small>
 </div>
@@ -51,7 +53,7 @@ const $=id=>document.getElementById(id);
 if(typeof L==='undefined'){$('map').innerHTML='<p style="padding:20px">De kaart kan niet laden. Open dit bestand rechtstreeks in je browser (dubbelklik) met internetverbinding.</p>';throw new Error('Leaflet niet geladen')}
 const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-let S={clients:[],cfg:{bedrijf:'',url:''}},sel=[],line=null,mk={};
+let S={clients:[],cfg:{bedrijf:'',url:''}},sel=[],line=null,hm=null,mk={};
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('kp')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('kp',JSON.stringify(S))}catch(e){}};
 const map=L.map('map').setView([51.05,4.4],9);
@@ -103,8 +105,8 @@ const hav=(a,b)=>{const t=x=>x*Math.PI/180,dl=t(b.lat-a.lat),dn=t(b.lon-a.lon),
   h=Math.sin(dl/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dn/2)**2;
   return 12742*Math.asin(Math.sqrt(h))};
 const len=o=>o.reduce((s,c,i)=>i?s+hav(o[i-1],c):0,0);
-function best(cs){
-  let o=[cs[0]],r=cs.slice(1);
+function best(cs,st){
+  let o=[st||cs[0]],r=st?cs.slice():cs.slice(1);
   while(r.length){const l=o[o.length-1];r.sort((a,b)=>hav(l,a)-hav(l,b));o.push(r.shift())}
   let imp=true;
   while(imp){imp=false;
@@ -112,17 +114,27 @@ function best(cs){
       const n=o.slice(0,i).concat(o.slice(i,j+1).reverse(),o.slice(j+1));
       if(len(n)<len(o)-1e-9){o=n;imp=true}
     }}
+  if(st)o.shift();
   return o;
 }
 function plan(){
   const d=$('datum').value;
   if(!d||!sel.length)return alert('Kies een datum en klik eerst klanten aan op de kaart.');
   const cs=sel.map(i=>S.clients.find(c=>c.id==i));
-  const ord=$('mode').value=='auto'?best(cs):cs;
+  const ord=$('mode').value=='auto'?best(cs,S.cfg.home):cs;
   ord.forEach((c,i)=>{c.datum=d;c.volgorde=i+1;c.verstuurd=false});
   sel=[];save();render();$('filter').value=d;render();
 }
-function cfg(){S.cfg={bedrijf:$('bedrijf').value,url:$('url').value};save()}
+async function cfg(){
+  const t=$('thuis').value.trim(),oud=S.cfg.thuis||'';
+  S.cfg.bedrijf=$('bedrijf').value;S.cfg.url=$('url').value;S.cfg.thuis=t;
+  if(!t)delete S.cfg.home;
+  else if(t!=oud||!S.cfg.home){
+    const p=await geo(t);
+    if(p)S.cfg.home=p;else{delete S.cfg.home;alert('Thuisadres niet gevonden. Controleer straat, nummer en gemeente.')}
+  }
+  save();render();
+}
 function done(i){S.clients[i].klaar=!S.clients[i].klaar;save();render()}
 function del(i){if(confirm('Klant verwijderen?')){S.clients.splice(i,1);save();render()}}
 
@@ -142,15 +154,18 @@ function render(){
     m.on('click',()=>{const i=sel.indexOf(c.id);i<0?sel.push(c.id):sel.splice(i,1);render()});
     mk[c.id]=m;
   });
-  if(d&&vis.length>1){
-    line=L.polyline(vis.map(c=>[c.lat,c.lon]),{color:'#d33',weight:3}).addTo(map);
+  if(hm){hm.remove();hm=null}
+  if(S.cfg.home)hm=L.marker([S.cfg.home.lat,S.cfg.home.lon],{icon:L.divIcon({html:'🏠',className:'huis',iconSize:[32,32],iconAnchor:[16,16]}),zIndexOffset:1000}).addTo(map).bindTooltip('Thuis');
+  const pts=(S.cfg.home?[S.cfg.home]:[]).concat(vis);
+  if(d&&vis.length&&pts.length>1){
+    line=L.polyline(pts.map(c=>[c.lat,c.lon]),{color:'#d33',weight:3}).addTo(map);
     map.fitBounds(line.getBounds(),{padding:[40,40]});
-    $('info').textContent='Route: ca. '+Math.round(len(vis)*1.3)+' km (geschat)';
+    $('info').textContent='Route: ca. '+Math.round(len(pts)*1.3)+' km (geschat)';
   }else $('info').textContent='';
   $('list').innerHTML=vis.map(c=>{const i=S.clients.indexOf(c);
     return `<div class="c"><span><span class="dot" style="background:${col(c)}"></span>${d&&c.volgorde?c.volgorde+'. ':''}${esc(c.naam)}<br><small>${esc(c.adres)}${c.verstuurd?' · verstuurd':''}</small></span>
     <span><button onclick="done(${i})">✓</button><button class="g" onclick="del(${i})">✕</button></span></div>`}).join('');
-  $('bedrijf').value=S.cfg.bedrijf||'';$('url').value=S.cfg.url||'';
+  $('bedrijf').value=S.cfg.bedrijf||'';$('url').value=S.cfg.url||'';$('thuis').value=S.cfg.thuis||'';
 }
 
 async function send(){
