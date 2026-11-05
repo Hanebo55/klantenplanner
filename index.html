@@ -53,7 +53,7 @@ let S={clients:[],cfg:{bedrijf:'',url:''}},sel=[],line=null,mk={};
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('kp')||'{}'))}catch(e){}
 const save=()=>{try{localStorage.setItem('kp',JSON.stringify(S))}catch(e){}};
 const map=L.map('map').setView([51.05,4.4],9);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 const col=c=>c.klaar?'#2a9d4a':c.datum?'#1d6fd8':'#888';
 const fmt=d=>new Date(d).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 
