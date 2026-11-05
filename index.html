@@ -105,10 +105,15 @@ const hav=(a,b)=>{const t=x=>x*Math.PI/180,dl=t(b.lat-a.lat),dn=t(b.lon-a.lon),
   h=Math.sin(dl/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dn/2)**2;
   return 12742*Math.asin(Math.sqrt(h))};
 const len=o=>o.reduce((s,c,i)=>i?s+hav(o[i-1],c):0,0);
+const OSRM=['https://router.project-osrm.org','https://routing.openstreetmap.de/routed-car'];
+async function osrm(path){
+  for(const b of OSRM){
+    try{const j=await (await fetch(b+path)).json();if(j.code=='Ok')return j}catch(e){}
+  }
+  throw 0;
+}
 async function osrmMatrix(pts){
-  const u='https://router.project-osrm.org/table/v1/driving/'+pts.map(p=>p.lon+','+p.lat).join(';')+'?annotations=duration';
-  const j=await (await fetch(u)).json();
-  if(j.code!='Ok')throw 0;
+  const j=await osrm('/table/v1/driving/'+pts.map(p=>p.lon+','+p.lat).join(';')+'?annotations=duration');
   return j.durations;
 }
 async function best(cs,home){
@@ -132,8 +137,7 @@ async function showRoute(pts){
   if(!rc[co]){
     $('info').textContent='Route berekenen…';
     try{
-      const j=await (await fetch('https://router.project-osrm.org/route/v1/driving/'+co+'?overview=full&geometries=geojson')).json();
-      if(j.code!='Ok')throw 0;
+      const j=await osrm('/route/v1/driving/'+co+'?overview=full&geometries=geojson');
       const r=j.routes[0];
       rc[co]={g:r.geometry.coordinates.map(c=>[c[1],c[0]]),km:r.distance/1000,min:r.duration/60};
     }catch(e){
