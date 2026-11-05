@@ -25,8 +25,9 @@ small{color:#666}#info{margin:4px 0;font-weight:600}
 <input id="a" placeholder="Adres (straat nr, postcode gemeente)">
 <input id="e" placeholder="E-mail">
 <button onclick="addOne()">Toevoegen</button>
-<small>Of importeer een CSV-bestand (naam;adres;e-mail)</small>
-<input type="file" id="f" accept=".csv,.txt" onchange="imp(this)">
+<small>Of importeer een Excel- of CSV-bestand. Zet bovenaan kopjes zoals Naam, Straat, Nr, Postcode, Gemeente, E-mail.</small>
+<input type="file" id="f" accept=".xlsx,.xls,.csv" onchange="imp(this)">
+<div id="impst"></div>
 <h2>Plannen</h2>
 <small>Klik klanten op de kaart aan, kies een datum en een volgorde.</small>
 <input type="date" id="datum">
@@ -44,6 +45,7 @@ small{color:#666}#info{margin:4px 0;font-weight:600}
 </div>
 <div id="map"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 if(typeof L==='undefined'){$('map').innerHTML='<p style="padding:20px">De kaart kan niet laden. Open dit bestand rechtstreeks in je browser (dubbelklik) met internetverbinding.</p>';throw new Error('Leaflet niet geladen')}
@@ -61,9 +63,9 @@ async function geo(q){
   const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=be,nl,lu&q='+encodeURIComponent(q));
   const j=await r.json();return j[0]?{lat:+j[0].lat,lon:+j[0].lon}:null;
 }
-async function add(naam,adres,email){
+async function add(naam,adres,email,quiet){
   const p=await geo(adres);
-  if(!p){alert('Adres niet gevonden: '+adres);return false}
+  if(!p){if(!quiet)alert('Adres niet gevonden: '+adres);return false}
   S.clients.push({id:Date.now()+Math.random(),naam,adres,email,...p});return true;
 }
 async function addOne(){
@@ -72,11 +74,29 @@ async function addOne(){
   if(await add(n,a,e)){['n','a','e'].forEach(i=>$(i).value='');save();render();map.setView([S.clients.at(-1).lat,S.clients.at(-1).lon],12)}
 }
 async function imp(inp){
-  const t=await inp.files[0].text();
-  const rows=t.split(/\r?\n/).filter(Boolean).map(l=>l.split(/[;,\t]/).map(x=>x.trim()));
-  if(rows.length&&/naam/i.test(rows[0][0]))rows.shift();
-  for(const [n,a,e] of rows){if(n&&a){await add(n,a,e||'');await sleep(1100)}}
-  save();render();inp.value='';
+  const f=inp.files[0];if(!f)return;
+  const st=$('impst');
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',raw:false}).filter(r=>r.some(x=>String(x).trim()));
+    if(!rows.length)throw 0;
+    const h=rows[0].map(x=>String(x).toLowerCase());
+    const ix=re=>h.findIndex(x=>re.test(x));
+    const c={n:ix(/naam|klant|name/),e:ix(/mail/),a:ix(/adres|address|straat/),nr:ix(/^(nr|huisnr|huisnummer|nummer)/),p:ix(/postcode|zip/),g:ix(/gemeente|stad|plaats|city/)};
+    let data=rows;
+    if(c.n>=0||c.a>=0)data=rows.slice(1);else Object.assign(c,{n:0,a:1,e:2,nr:-1,p:-1,g:-1});
+    const get=(r,i)=>i>=0?String(r[i]||'').trim():'';
+    const todo=data.map(r=>({n:get(r,c.n),e:get(r,c.e),a:[get(r,c.a),get(r,c.nr),get(r,c.p),get(r,c.g)].filter(Boolean).join(' ')}))
+      .filter(x=>x.n&&x.a&&!S.clients.some(k=>k.naam==x.n&&k.adres==x.a));
+    let ok=0;const bad=[];
+    for(const [i,x] of todo.entries()){
+      st.textContent='Importeren '+(i+1)+' van '+todo.length+'…';
+      (await add(x.n,x.a,x.e,true))?ok++:bad.push(x.n+' ('+x.a+')');
+      save();await sleep(1100);
+    }
+    st.textContent=ok+' klanten toegevoegd.'+(bad.length?' Adres niet gevonden voor: '+bad.join(', '):'');
+  }catch(e){st.textContent='Dit bestand kon niet gelezen worden. Gebruik een Excel- of CSV-bestand met bovenaan kopjes (Naam, Adres, E-mail).'}
+  inp.value='';render();
 }
 
 const hav=(a,b)=>{const t=x=>x*Math.PI/180,dl=t(b.lat-a.lat),dn=t(b.lon-a.lon),
