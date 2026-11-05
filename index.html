@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Klantenplanner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font:14px system-ui,sans-serif;display:flex;height:100vh;color:#222}
+#side{width:360px;overflow:auto;padding:12px;border-right:1px solid #ddd}
+html{height:100%}#map{flex:1;min-height:300px;background:#e8eef3}
+h1{font-size:18px;margin:0 0 8px}h2{font-size:14px;margin:14px 0 6px}
+input,select,button{font:inherit;padding:6px;margin:2px 0;width:100%}
+button{cursor:pointer;background:#1d6fd8;color:#fff;border:0;border-radius:4px}
+button.g{background:#666}
+.c{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee}
+.c button{width:auto;padding:2px 8px;margin-left:4px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+small{color:#666}#info{margin:4px 0;font-weight:600}
+@media(max-width:700px){body{flex-direction:column-reverse}#side{width:100%;height:55%}#map{height:45%;flex:none}}
+</style></head><body>
+<div id="side">
+<h1>Klantenplanner</h1>
+<h2>Klant toevoegen</h2>
+<input id="n" placeholder="Naam">
+<input id="a" placeholder="Adres (straat nr, postcode gemeente)">
+<input id="e" placeholder="E-mail">
+<button onclick="addOne()">Toevoegen</button>
+<small>Of importeer een CSV-bestand (naam;adres;e-mail)</small>
+<input type="file" id="f" accept=".csv,.txt" onchange="imp(this)">
+<h2>Plannen</h2>
+<small>Klik klanten op de kaart aan, kies een datum en een volgorde.</small>
+<input type="date" id="datum">
+<select id="mode"><option value="klik">Volgorde van aanklikken</option><option value="auto">Automatisch kortste route</option></select>
+<button onclick="plan()">Plan geselecteerde klanten</button>
+<button class="g" onclick="sel=[];render()">Selectie wissen</button>
+<h2>Overzicht</h2>
+<select id="filter" onchange="render()"></select>
+<div id="info"></div><div id="list"></div>
+<button onclick="send()">Verstuur berichten voor deze dag</button>
+<h2>Instellingen</h2>
+<input id="bedrijf" placeholder="Bedrijfsnaam" onchange="cfg()">
+<input id="url" placeholder="Verzend-URL (komt in de volgende stap)" onchange="cfg()">
+<small>Grijs = nog te plannen · blauw = gepland · groen = klaar</small>
+</div>
+<div id="map"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+if(typeof L==='undefined'){$('map').innerHTML='<p style="padding:20px">De kaart kan niet laden. Open dit bestand rechtstreeks in je browser (dubbelklik) met internetverbinding.</p>';throw new Error('Leaflet niet geladen')}
+const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let S={clients:[],cfg:{bedrijf:'',url:''}},sel=[],line=null,mk={};
+try{S=Object.assign(S,JSON.parse(localStorage.getItem('kp')||'{}'))}catch(e){}
+const save=()=>{try{localStorage.setItem('kp',JSON.stringify(S))}catch(e){}};
+const map=L.map('map').setView([51.05,4.4],9);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:19,attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+const col=c=>c.klaar?'#2a9d4a':c.datum?'#1d6fd8':'#888';
+const fmt=d=>new Date(d).toLocaleDateString('nl-BE',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+async function geo(q){
+  const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=be,nl,lu&q='+encodeURIComponent(q));
+  const j=await r.json();return j[0]?{lat:+j[0].lat,lon:+j[0].lon}:null;
+}
+async function add(naam,adres,email){
+  const p=await geo(adres);
+  if(!p){alert('Adres niet gevonden: '+adres);return false}
+  S.clients.push({id:Date.now()+Math.random(),naam,adres,email,...p});return true;
+}
+async function addOne(){
+  const n=$('n').value.trim(),a=$('a').value.trim(),e=$('e').value.trim();
+  if(!n||!a)return alert('Vul naam en adres in.');
+  if(await add(n,a,e)){['n','a','e'].forEach(i=>$(i).value='');save();render();map.setView([S.clients.at(-1).lat,S.clients.at(-1).lon],12)}
+}
+async function imp(inp){
+  const t=await inp.files[0].text();
+  const rows=t.split(/\r?\n/).filter(Boolean).map(l=>l.split(/[;,\t]/).map(x=>x.trim()));
+  if(rows.length&&/naam/i.test(rows[0][0]))rows.shift();
+  for(const [n,a,e] of rows){if(n&&a){await add(n,a,e||'');await sleep(1100)}}
+  save();render();inp.value='';
+}
+
+const hav=(a,b)=>{const t=x=>x*Math.PI/180,dl=t(b.lat-a.lat),dn=t(b.lon-a.lon),
+  h=Math.sin(dl/2)**2+Math.cos(t(a.lat))*Math.cos(t(b.lat))*Math.sin(dn/2)**2;
+  return 12742*Math.asin(Math.sqrt(h))};
+const len=o=>o.reduce((s,c,i)=>i?s+hav(o[i-1],c):0,0);
+function best(cs){
+  let o=[cs[0]],r=cs.slice(1);
+  while(r.length){const l=o[o.length-1];r.sort((a,b)=>hav(l,a)-hav(l,b));o.push(r.shift())}
+  let imp=true;
+  while(imp){imp=false;
+    for(let i=1;i<o.length-1;i++)for(let j=i+1;j<o.length;j++){
+      const n=o.slice(0,i).concat(o.slice(i,j+1).reverse(),o.slice(j+1));
+      if(len(n)<len(o)-1e-9){o=n;imp=true}
+    }}
+  return o;
+}
+function plan(){
+  const d=$('datum').value;
+  if(!d||!sel.length)return alert('Kies een datum en klik eerst klanten aan op de kaart.');
+  const cs=sel.map(i=>S.clients.find(c=>c.id==i));
+  const ord=$('mode').value=='auto'?best(cs):cs;
+  ord.forEach((c,i)=>{c.datum=d;c.volgorde=i+1;c.verstuurd=false});
+  sel=[];save();render();$('filter').value=d;render();
+}
+function cfg(){S.cfg={bedrijf:$('bedrijf').value,url:$('url').value};save()}
+function done(i){S.clients[i].klaar=!S.clients[i].klaar;save();render()}
+function del(i){if(confirm('Klant verwijderen?')){S.clients.splice(i,1);save();render()}}
+
+function render(){
+  const fl=$('filter'),cur=fl.value;
+  const ds=[...new Set(S.clients.map(c=>c.datum).filter(Boolean))].sort();
+  fl.innerHTML='<option value="">Alle klanten</option>'+ds.map(d=>`<option value="${d}">${fmt(d)}</option>`).join('');
+  fl.value=ds.includes(cur)?cur:'';
+  const d=fl.value,vis=S.clients.filter(c=>!d||c.datum==d).sort((a,b)=>(a.volgorde||99)-(b.volgorde||99));
+  Object.values(mk).forEach(m=>m.remove());mk={};
+  if(line){line.remove();line=null}
+  vis.forEach(c=>{
+    const s=sel.indexOf(c.id);
+    const lab=(s>=0?(s+1)+'. ':d&&c.volgorde?c.volgorde+'. ':'')+c.naam;
+    const m=L.circleMarker([c.lat,c.lon],{radius:9,color:s>=0?'#000':'#fff',weight:s>=0?4:2,fillColor:col(c),fillOpacity:1})
+      .addTo(map).bindTooltip(lab,{permanent:s>=0||!!d});
+    m.on('click',()=>{const i=sel.indexOf(c.id);i<0?sel.push(c.id):sel.splice(i,1);render()});
+    mk[c.id]=m;
+  });
+  if(d&&vis.length>1){
+    line=L.polyline(vis.map(c=>[c.lat,c.lon]),{color:'#d33',weight:3}).addTo(map);
+    map.fitBounds(line.getBounds(),{padding:[40,40]});
+    $('info').textContent='Route: ca. '+Math.round(len(vis)*1.3)+' km (geschat)';
+  }else $('info').textContent='';
+  $('list').innerHTML=vis.map(c=>{const i=S.clients.indexOf(c);
+    return `<div class="c"><span><span class="dot" style="background:${col(c)}"></span>${d&&c.volgorde?c.volgorde+'. ':''}${esc(c.naam)}<br><small>${esc(c.adres)}${c.verstuurd?' · verstuurd':''}</small></span>
+    <span><button onclick="done(${i})">✓</button><button class="g" onclick="del(${i})">✕</button></span></div>`}).join('');
+  $('bedrijf').value=S.cfg.bedrijf||'';$('url').value=S.cfg.url||'';
+}
+
+async function send(){
+  const d=$('filter').value;
+  const l=S.clients.filter(c=>c.datum==d&&!c.verstuurd&&c.email);
+  if(!d||!l.length)return alert('Kies bovenaan een datum met klanten die nog geen bericht kregen.');
+  const msgs=l.map(c=>({to:c.email,subject:'Afspraak op '+fmt(d),type:'bevestiging',datum:d,
+    body:`Beste ${c.naam},\n\nWe komen bij u langs op ${fmt(d)}.\n\nMet vriendelijke groeten,\n${S.cfg.bedrijf}`}));
+  if(!S.cfg.url)return alert('Nog geen verzend-URL ingesteld. Zo ziet het bericht eruit:\n\n'+msgs[0].body);
+  try{
+    const r=await fetch(S.cfg.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(msgs)});
+    if(!r.ok)throw 0;
+    l.forEach(c=>c.verstuurd=true);save();render();alert(l.length+' berichten verstuurd.');
+  }catch(e){alert('Versturen mislukt.')}
+}
+render();
+</script></body></html>
