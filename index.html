@@ -5,49 +5,85 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
 <style>
 *{box-sizing:border-box}
-body{margin:0;font:14px system-ui,sans-serif;display:flex;height:100vh;color:#222}
-#side{width:360px;overflow:auto;padding:12px;border-right:1px solid #ddd}
-html{height:100%}#map{flex:1;min-height:300px;background:#e8eef3}
-h1{font-size:18px;margin:0 0 8px}h2{font-size:14px;margin:14px 0 6px}
-input,select,button{font:inherit;padding:6px;margin:2px 0;width:100%}
-button{cursor:pointer;background:#1d6fd8;color:#fff;border:0;border-radius:4px}
-button.g{background:#666}
-.c{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #eee}
-.c button{width:auto;padding:2px 8px;margin-left:4px}
+html,body{height:100%}
+body{margin:0;font:14px system-ui,sans-serif;color:#222;background:#f4f6f9;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:0 14px;height:54px;background:#fff;border-bottom:1px solid #dde3ea;flex:none}
+header b{font-size:17px;white-space:nowrap}
+nav{display:flex;gap:4px;margin-left:auto}
+nav button{width:auto;background:none;color:#444;margin:0;padding:8px 12px}
+nav button.on{background:#e3eefc;color:#1d6fd8}
+main{flex:1;min-height:0;display:flex}
+section{display:none;flex:1;min-width:0;min-height:0}
+section.show{display:flex}
+aside{width:360px;overflow:auto;padding:12px;flex:none}
+#map{flex:1;min-height:300px;background:#e8eef3}
+.page{overflow:auto;padding:16px;flex-direction:column;align-items:center}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #0002;width:100%;max-width:560px}
+h1{font-size:18px;margin:0 0 8px}h2{font-size:15px;margin:0 0 8px}
+input,select,button{font:inherit;padding:9px;margin:3px 0;width:100%;border:1px solid #cdd5df;border-radius:8px;background:#fff}
+button{cursor:pointer;background:#1d6fd8;color:#fff;border:0;font-weight:600}
+button.g{background:#6b7785}
+.c{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #eef0f3}
+.c button{width:auto;padding:3px 10px;margin-left:4px}
 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
 .huis{font-size:26px;line-height:32px;text-align:center;background:none;border:0}
-small{color:#666}#info{margin:4px 0;font-weight:600}
-@media(max-width:700px){body{flex-direction:column-reverse}#side{width:100%;height:55%}#map{height:45%;flex:none}}
+small{color:#667}#info{margin:6px 0;font-weight:600}
+.leg span{margin-right:10px;white-space:nowrap}
+@media(max-width:700px){#v-kaart.show{flex-direction:column-reverse}aside{width:100%;height:50%}#map{min-height:0}nav button{padding:8px}header b{display:none}}
 </style></head><body>
-<div id="side">
-<h1>Klantenplanner</h1>
-<h2>Klant toevoegen</h2>
-<input id="n" placeholder="Naam">
-<input id="a" placeholder="Adres (straat nr, postcode gemeente)">
-<input id="e" placeholder="E-mail">
-<button onclick="addOne()">Toevoegen</button>
-<small>Of importeer een Excel- of CSV-bestand. Zet bovenaan kopjes zoals Naam, Straat, Nr, Postcode, Gemeente, E-mail.</small>
-<input type="file" id="f" accept=".xlsx,.xls,.csv" onchange="imp(this)">
-<div id="impst"></div>
-<h2>Plannen</h2>
+<header><b>📍 Klantenplanner</b>
+<nav><button id="t-kaart" onclick="tab('kaart')">🗺️ Kaart</button><button id="t-klanten" onclick="tab('klanten')">👥 Klanten</button><button id="t-instel" onclick="tab('instel')">⚙️ Instellingen</button></nav></header>
+<main>
+<section id="v-kaart" class="show">
+<aside>
+<div class="card"><h2>Dag plannen</h2>
 <small>Klik klanten op de kaart aan, kies een datum en een volgorde.</small>
 <input type="date" id="datum">
-<select id="mode"><option value="klik">Volgorde van aanklikken</option><option value="auto">Automatisch kortste route</option></select>
+<select id="mode"><option value="klik">Volgorde van aanklikken</option><option value="auto">Automatisch kortste ronde vanaf huis</option></select>
 <button onclick="plan()">Plan geselecteerde klanten</button>
-<button class="g" onclick="sel=[];render()">Selectie wissen</button>
-<h2>Overzicht</h2>
+<button class="g" onclick="sel=[];render()">Selectie wissen</button></div>
+<div class="card"><h2>Overzicht</h2>
 <select id="filter" onchange="render()"></select>
 <div id="info"></div><div id="list"></div>
 <button onclick="send()">Verstuur berichten voor deze dag</button>
-<h2>Instellingen</h2>
-<input id="bedrijf" placeholder="Bedrijfsnaam" onchange="cfg()">
-<input id="thuis" placeholder="Thuisadres (startpunt van de route)" onchange="cfg()">
-<input id="url" placeholder="Verzend-URL (komt in de volgende stap)" onchange="cfg()">
-<small>Grijs = nog te plannen · blauw = gepland · groen = klaar</small>
-</div>
+<div class="leg"><small><span><i class="dot" style="background:#888"></i>te plannen</span><span><i class="dot" style="background:#1d6fd8"></i>gepland</span><span><i class="dot" style="background:#2a9d4a"></i>klaar</span></small></div></div>
+</aside>
 <div id="map"></div>
+</section>
+<section id="v-klanten" class="page">
+<div class="card"><h2>Nieuwe klant</h2>
+<input id="n" placeholder="Naam">
+<input id="a" placeholder="Adres (straat nr, postcode gemeente)">
+<input id="e" placeholder="E-mail">
+<button onclick="addOne()">Klant toevoegen</button></div>
+<div class="card"><h2>Importeren uit Excel</h2>
+<small>Zet bovenaan kopjes zoals Naam, Straat, Nr, Postcode, Gemeente, E-mail.</small>
+<input type="file" id="f" accept=".xlsx,.xls,.csv" onchange="imp(this)">
+<div id="impst"></div></div>
+<div class="card"><h2>Alle klanten (<span id="cnt">0</span>)</h2><div id="all"></div></div>
+</section>
+<section id="v-instel" class="page">
+<div class="card"><h2>Jouw gegevens</h2>
+<input id="naam" placeholder="Jouw naam">
+<input id="bedrijf" placeholder="Bedrijfsnaam">
+<input id="thuis" placeholder="Thuisadres (begin en einde van je route)">
+<small>Je thuisadres verschijnt als huisje op de kaart.</small>
+<button onclick="cfg()">Opslaan</button><div id="cfgst"></div></div>
+<div class="card"><h2>Berichten</h2>
+<input id="url" placeholder="Verzend-URL (komt in de volgende stap)" onchange="cfg()"></div>
+<div class="card"><h2>Account</h2><button class="g" onclick="logout()">Uitloggen</button></div>
+</section>
+</main>
+<div id="login" style="position:fixed;inset:0;z-index:2000;background:#fff;display:flex;align-items:center;justify-content:center">
+<div style="width:320px;padding:12px"><h1>📍 Klantenplanner</h1>
+<input id="le" type="email" placeholder="E-mailadres">
+<input id="lp" type="password" placeholder="Wachtwoord (minstens 6 tekens)">
+<button onclick="auth('in')">Inloggen</button>
+<button class="g" onclick="auth('up')">Account maken</button>
+<div id="lm" style="color:#c00;margin-top:6px"></div></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 if(typeof L==='undefined'){$('map').innerHTML='<p style="padding:20px">De kaart kan niet laden. Open dit bestand rechtstreeks in je browser (dubbelklik) met internetverbinding.</p>';throw new Error('Leaflet niet geladen')}
@@ -55,7 +91,51 @@ const esc=s=>String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let S={clients:[],cfg:{bedrijf:'',url:''}},sel=[],line=null,hm=null,mk={};
 try{S=Object.assign(S,JSON.parse(localStorage.getItem('kp')||'{}'))}catch(e){}
-const save=()=>{try{localStorage.setItem('kp',JSON.stringify(S))}catch(e){}};
+const sb=supabase.createClient('https://hdmlybzirzgptmfepjfj.supabase.co','sb_publishable_OVJjt-eP38YJRJKnWbeQJQ_GQasSc7W');
+let user=null,tm=null;
+function save(){
+  try{localStorage.setItem('kp',JSON.stringify(S))}catch(e){}
+  clearTimeout(tm);tm=setTimeout(push,700);
+}
+async function push(){
+  if(!user)return;
+  const rows=S.clients.map(c=>({id:c.id,user_id:user.id,naam:c.naam,adres:c.adres,email:c.email||'',lat:c.lat,lon:c.lon,
+    datum:c.datum||null,volgorde:c.volgorde||null,klaar:!!c.klaar,verstuurd:!!c.verstuurd}));
+  const h=S.cfg.home;
+  const a=rows.length?await sb.from('klanten').upsert(rows):{};
+  const b=await sb.from('instellingen').upsert({user_id:user.id,naam:S.cfg.naam||'',bedrijf:S.cfg.bedrijf||'',thuis:S.cfg.thuis||'',
+    home_lat:h?h.lat:null,home_lon:h?h.lon:null,url:S.cfg.url||''});
+  const err=a.error||b.error;
+  if(err)alert('Opslaan mislukt: '+err.message);
+}
+async function auth(mode){
+  const e=$('le').value.trim(),p=$('lp').value;
+  const r=mode=='in'?await sb.auth.signInWithPassword({email:e,password:p}):await sb.auth.signUp({email:e,password:p});
+  if(r.error)return $('lm').textContent=r.error.message;
+  if(!r.data.session)return $('lm').textContent='Account gemaakt. Bevestig via de mail die je kreeg en log daarna in.';
+  start(r.data.session.user);
+}
+async function start(u){
+  user=u;$('login').style.display='none';
+  await load();render();
+}
+async function load(){
+  const [k,i]=await Promise.all([sb.from('klanten').select('*'),sb.from('instellingen').select('*').maybeSingle()]);
+  if(k.error||i.error)return alert('Laden mislukt: '+(k.error||i.error).message);
+  if(!k.data.length&&!i.data){
+    S.clients.forEach(c=>{if(typeof c.id!='string')c.id=crypto.randomUUID()});
+    push();return;
+  }
+  S.clients=k.data;
+  const d=i.data||{};
+  S.cfg={naam:d.naam||'',bedrijf:d.bedrijf||'',url:d.url||'',thuis:d.thuis||''};
+  if(d.home_lat!=null)S.cfg.home={lat:d.home_lat,lon:d.home_lon};
+}
+async function logout(){
+  await sb.auth.signOut();
+  try{localStorage.removeItem('kp')}catch(e){}
+  location.reload();
+}
 const map=L.map('map').setView([51.05,4.4],9);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);
 const col=c=>c.klaar?'#2a9d4a':c.datum?'#1d6fd8':'#888';
@@ -68,7 +148,7 @@ async function geo(q){
 async function add(naam,adres,email,quiet){
   const p=await geo(adres);
   if(!p){if(!quiet)alert('Adres niet gevonden: '+adres);return false}
-  S.clients.push({id:Date.now()+Math.random(),naam,adres,email,...p});return true;
+  S.clients.push({id:crypto.randomUUID(),naam,adres,email,...p});return true;
 }
 async function addOne(){
   const n=$('n').value.trim(),a=$('a').value.trim(),e=$('e').value.trim();
@@ -166,16 +246,22 @@ async function plan(){
 }
 async function cfg(){
   const t=$('thuis').value.trim(),oud=S.cfg.thuis||'';
-  S.cfg.bedrijf=$('bedrijf').value;S.cfg.url=$('url').value;S.cfg.thuis=t;
+  S.cfg.naam=$('naam').value;S.cfg.bedrijf=$('bedrijf').value;S.cfg.url=$('url').value;S.cfg.thuis=t;
   if(!t)delete S.cfg.home;
   else if(t!=oud||!S.cfg.home){
     const p=await geo(t);
     if(p)S.cfg.home=p;else{delete S.cfg.home;alert('Thuisadres niet gevonden. Controleer straat, nummer en gemeente.')}
   }
   save();render();
+  $('cfgst').textContent='Opgeslagen ✓';setTimeout(()=>$('cfgst').textContent='',2500);
 }
 function done(i){S.clients[i].klaar=!S.clients[i].klaar;save();render()}
-function del(i){if(confirm('Klant verwijderen?')){S.clients.splice(i,1);save();render()}}
+function del(i){
+  if(!confirm('Klant verwijderen?'))return;
+  const id=S.clients[i].id;S.clients.splice(i,1);
+  if(user)sb.from('klanten').delete().eq('id',id).then(()=>{});
+  save();render();
+}
 
 function render(){
   const fl=$('filter'),cur=fl.value;
@@ -198,10 +284,13 @@ function render(){
   const pts=S.cfg.home?[S.cfg.home,...vis,S.cfg.home]:vis;
   if(d&&vis.length&&pts.length>1)showRoute(pts);
   else{rt++;$('info').textContent=''}
-  $('list').innerHTML=vis.map(c=>{const i=S.clients.indexOf(c);
-    return `<div class="c"><span><span class="dot" style="background:${col(c)}"></span>${d&&c.volgorde?c.volgorde+'. ':''}${esc(c.naam)}<br><small>${esc(c.adres)}${c.verstuurd?' · verstuurd':''}</small></span>
-    <span><button onclick="done(${i})">✓</button><button class="g" onclick="del(${i})">✕</button></span></div>`}).join('');
-  $('bedrijf').value=S.cfg.bedrijf||'';$('url').value=S.cfg.url||'';$('thuis').value=S.cfg.thuis||'';
+  const row=c=>{const i=S.clients.indexOf(c);
+    return `<div class="c"><span><span class="dot" style="background:${col(c)}"></span>${d&&c.volgorde?c.volgorde+'. ':''}${esc(c.naam)}<br><small>${esc(c.adres)}${c.datum?' · '+fmt(c.datum):''}${c.verstuurd?' · verstuurd':''}</small></span>
+    <span><button onclick="done(${i})">✓</button><button class="g" onclick="del(${i})">✕</button></span></div>`};
+  $('list').innerHTML=vis.map(row).join('')||'<small>Geen klanten om te tonen. Voeg ze toe bij Klanten.</small>';
+  $('all').innerHTML=S.clients.slice().sort((a,b)=>a.naam.localeCompare(b.naam)).map(row).join('')||'<small>Nog geen klanten.</small>';
+  $('cnt').textContent=S.clients.length;
+  $('naam').value=S.cfg.naam||'';$('bedrijf').value=S.cfg.bedrijf||'';$('url').value=S.cfg.url||'';$('thuis').value=S.cfg.thuis||'';
 }
 
 async function send(){
@@ -209,7 +298,7 @@ async function send(){
   const l=S.clients.filter(c=>c.datum==d&&!c.verstuurd&&c.email);
   if(!d||!l.length)return alert('Kies bovenaan een datum met klanten die nog geen bericht kregen.');
   const msgs=l.map(c=>({to:c.email,subject:'Afspraak op '+fmt(d),type:'bevestiging',datum:d,
-    body:`Beste ${c.naam},\n\nWe komen bij u langs op ${fmt(d)}.\n\nMet vriendelijke groeten,\n${S.cfg.bedrijf}`}));
+    body:`Beste ${c.naam},\n\nWe komen bij u langs op ${fmt(d)}.\n\nMet vriendelijke groeten,\n${S.cfg.naam||''}${S.cfg.bedrijf?'\n'+S.cfg.bedrijf:''}`}));
   if(!S.cfg.url)return alert('Nog geen verzend-URL ingesteld. Zo ziet het bericht eruit:\n\n'+msgs[0].body);
   try{
     const r=await fetch(S.cfg.url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(msgs)});
@@ -217,5 +306,10 @@ async function send(){
     l.forEach(c=>c.verstuurd=true);save();render();alert(l.length+' berichten verstuurd.');
   }catch(e){alert('Versturen mislukt.')}
 }
-render();
+function tab(t){
+  ['kaart','klanten','instel'].forEach(x=>{$('v-'+x).classList.toggle('show',x==t);$('t-'+x).classList.toggle('on',x==t)});
+  if(t=='kaart')setTimeout(()=>map.invalidateSize(),50);
+}
+tab('kaart');render();
+sb.auth.getSession().then(({data})=>{if(data.session)start(data.session.user)});
 </script></body></html>
